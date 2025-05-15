@@ -3,7 +3,6 @@ import cv2
 import os
 import json
 from datetime import datetime
-import numpy as np
 
 
 model = YOLO('yolov8n.pt')  
@@ -45,16 +44,6 @@ def detect_airplanes(image_path: str, save_path: str = "output.jpg") -> int:
     log_detection(os.path.basename(image_path), len(airplane_boxes))
     return len(airplane_boxes)
 
-
-def is_new_box(box, prev_boxes, threshold=50):
-    x1, y1, x2, y2 = map(int, box.xyxy[0])
-    cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
-
-    for px, py in prev_boxes:
-        if np.sqrt((cx - px)**2 + (cy - py)**2) < threshold:
-            return False
-    return True
-
 def detect_airplanes_in_video(video_path: str, output_path: str = "output_video.avi") -> int:
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
@@ -65,8 +54,8 @@ def detect_airplanes_in_video(video_path: str, output_path: str = "output_video.
     fps = cap.get(cv2.CAP_PROP_FPS)
 
     out = cv2.VideoWriter(output_path, cv2.VideoWriter_fourcc(*'XVID'), fps, (width, height))
+    total_detected = 0
 
-    unique_airplanes = []
     while True:
         ret, frame = cap.read()
         if not ret:
@@ -74,13 +63,9 @@ def detect_airplanes_in_video(video_path: str, output_path: str = "output_video.
 
         results = model.predict(source=frame, classes=[AIRPLANE_CLASS_ID], verbose=False)[0]
         airplane_boxes = [box for box in results.boxes if int(box.cls) == AIRPLANE_CLASS_ID]
+        total_detected += len(airplane_boxes)
 
         for box in airplane_boxes:
-            if is_new_box(box, unique_airplanes):
-                x1, y1, x2, y2 = map(int, box.xyxy[0])
-                cx, cy = (x1 + x2) // 2, (y1 + y2) // 2
-                unique_airplanes.append((cx, cy))
-
             x1, y1, x2, y2 = map(int, box.xyxy[0])
             conf = float(box.conf)
             cv2.rectangle(frame, (x1, y1), (x2, y2), (255, 0, 0), 2)
@@ -91,10 +76,8 @@ def detect_airplanes_in_video(video_path: str, output_path: str = "output_video.
 
     cap.release()
     out.release()
-
-    log_detection(os.path.basename(video_path), len(unique_airplanes))
-    return len(unique_airplanes)
-
+    log_detection(os.path.basename(video_path), total_detected)
+    return total_detected
 
 
 
